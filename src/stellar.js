@@ -71,25 +71,33 @@ export const createNFTAsset = (assetCode, issuerPublicKey) => {
 };
 
 // Get all NFTs owned by an account
+// NOTE: This function uses classic Stellar asset balances — it is preserved
+// for transfer/trustline flows that deal with asset-based tokens.
+// For the Soroban-native OrbitNFT contract, use getWalletNFTs() in contract.js
+// instead, which queries owner_of() and token_metadata() directly.
+//
+// "balance == 1" heuristic caveat: filtering by balance === 1 is a common
+// NFT proxy for classic Stellar assets, but it is NOT a guaranteed indicator —
+// fungible tokens, small-denomination assets, or dust balances can also have
+// balance == 1. This heuristic should NOT be used for ownership proofs.
 export const getNFTs = async (publicKey) => {
-  try {
-    const account = await getAccount(publicKey);
-    
-    // Filter out native XLM, return only custom assets
-    const nfts = account.balances.filter(
-      (balance) =>
-        balance.asset_type !== 'native' &&
-        parseFloat(balance.balance) === 1
-    );
+  // Let errors propagate so callers can distinguish "fetch failed" from
+  // "wallet has no NFTs". Previously this caught all errors and returned [],
+  // making network failures look identical to an empty wallet.
+  const account = await getAccount(publicKey);
 
-    return nfts.map((nft) => ({
-      code: nft.asset_code,
-      issuer: nft.asset_issuer,
-      balance: nft.balance,
-    }));
-  } catch (error) {
-    return [];
-  }
+  // Filter to classic Stellar custom assets with balance == 1 (NFT heuristic).
+  const nfts = account.balances.filter(
+    (balance) =>
+      balance.asset_type !== 'native' &&
+      parseFloat(balance.balance) === 1
+  );
+
+  return nfts.map((nft) => ({
+    code: nft.asset_code,
+    issuer: nft.asset_issuer,
+    balance: nft.balance,
+  }));
 };
 
 // Mint an NFT asset on Stellar Testnet with IPFS metadata

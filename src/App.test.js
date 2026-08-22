@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from './App';
 import * as freighter from '@stellar/freighter-api';
+import * as contractMod from './contract';
 
 jest.mock('@stellar/freighter-api', () => ({
   isConnected: jest.fn(),
@@ -13,6 +14,20 @@ jest.mock('@stellar/freighter-api', () => ({
   getNetworkDetails: jest.fn(),
 }));
 
+// Gallery imports contract.js which instantiates SorobanRpc.Server at module
+// level — mock the whole module so App.test.js stays focused on App logic.
+jest.mock('./contract', () => ({
+  getWalletNFTs: jest.fn(() => Promise.resolve([])),
+  ipfsUriToUrl: jest.fn(() => null),
+  getTotalSupply: jest.fn(() => Promise.resolve(0)),
+  getTokenOwner: jest.fn(() => Promise.resolve(null)),
+  mintNFTOnChain: jest.fn(),
+  CONTRACT_ID: 'CBU7UVJM7FAXB7AHCDMTKVJSUEE3PVTV2ROFOKO2P3IC4IKRTB45IHFA',
+  IPFS_GATEWAY: 'https://ipfs.io/ipfs/',
+  IPFS_FETCH_TIMEOUT_MS: 8000,
+  CONCURRENCY_LIMIT: 5,
+}));
+
 describe('App component', () => {
   const samplePublicKey = 'GA2C5RFPE6GCKMYYLHSI6AWBXPXR6O54VUUBM3CUS5W27EWBXRXGWXY7';
 
@@ -20,6 +35,9 @@ describe('App component', () => {
     jest.clearAllMocks();
     localStorage.clear();
     freighter.getNetwork.mockResolvedValue({ network: 'TESTNET' });
+    // Re-set contract mock after clearAllMocks so Gallery can render without crashing
+    contractMod.getWalletNFTs.mockResolvedValue([]);
+    contractMod.ipfsUriToUrl.mockReturnValue(null);
   });
 
   test('renders App with header and default Gallery tab', () => {
@@ -36,22 +54,19 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
     // Address truncated to first 4 + ... + last 4
-    expect(screen.getByText(/GA2C\.\.\.WXY7/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/GA2C\.\.\.WXY7/i)).toBeInTheDocument();
+    });
     expect(localStorage.getItem('freighterConnected')).toBe('true');
 
     const disconnectButton = screen.getByRole('button', { name: /disconnect/i });
     expect(disconnectButton).toBeInTheDocument();
 
     // Click Disconnect
-    act(() => {
-      fireEvent.click(disconnectButton);
-    });
+    fireEvent.click(disconnectButton);
 
     // Should return to Connect Wallet state
     expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
@@ -90,12 +105,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/please install freighter wallet/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/please install freighter wallet/i)).toBeInTheDocument();
+    });
     const installLink = screen.getByRole('link', { name: /install freighter/i });
     expect(installLink).toBeInTheDocument();
     expect(installLink).toHaveAttribute('href', 'https://www.freighter.app/');
@@ -106,12 +120,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/please install freighter wallet/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/please install freighter wallet/i)).toBeInTheDocument();
+    });
     expect(screen.getByRole('link', { name: /install freighter/i })).toBeInTheDocument();
   });
 
@@ -121,12 +134,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/user rejected the connection request/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/user rejected the connection request/i)).toBeInTheDocument();
+    });
     expect(screen.queryByRole('link', { name: /install freighter/i })).not.toBeInTheDocument();
   });
 
@@ -136,12 +148,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/user rejected the connection request/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/user rejected the connection request/i)).toBeInTheDocument();
+    });
   });
 
   test('handles wallet locked error when error indicates wallet is locked', async () => {
@@ -150,12 +161,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/freighter wallet is locked/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/freighter wallet is locked/i)).toBeInTheDocument();
+    });
   });
 
   test('handles wallet locked thrown error', async () => {
@@ -164,12 +174,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/freighter wallet is locked/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/freighter wallet is locked/i)).toBeInTheDocument();
+    });
   });
 
   test('warns user when wallet is connected to a non-TESTNET network', async () => {
@@ -180,13 +189,12 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
     // Wallet is connected
-    expect(screen.getByText(/GA2C\.\.\.WXY7/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/GA2C\.\.\.WXY7/i)).toBeInTheDocument();
+    });
     // Warning status is shown
     expect(screen.getByText(/warning: please switch freighter network to testnet/i)).toBeInTheDocument();
   });
@@ -199,22 +207,20 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    act(() => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
     // Button should now be disabled with connecting label
-    const connectingButton = screen.getByRole('button', { name: /connecting\.\.\./i });
-    expect(connectingButton).toBeInTheDocument();
-    expect(connectingButton).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /connecting\.\.\./i })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /connecting\.\.\./i })).toBeDisabled();
 
     // Resolving connection
-    await act(async () => {
-      resolveConnect(false);
-    });
+    resolveConnect(false);
 
-    expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /connect wallet/i })).toBeInTheDocument();
+    });
   });
 
   test('handles unexpected generic error with fallback message and console.error', async () => {
@@ -224,12 +230,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText('Connection failed. Try again.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Connection failed. Try again.')).toBeInTheDocument();
+    });
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
@@ -243,12 +248,11 @@ describe('App component', () => {
 
     render(<App />);
 
-    const connectButton = screen.getByRole('button', { name: /connect wallet/i });
-    await act(async () => {
-      fireEvent.click(connectButton);
-    });
+    fireEvent.click(screen.getByRole('button', { name: /connect wallet/i }));
 
-    expect(screen.getByText(/GA2C\.\.\.WXY7/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/GA2C\.\.\.WXY7/i)).toBeInTheDocument();
+    });
     expect(localStorage.getItem('freighterConnected')).toBe('true');
   });
 });
