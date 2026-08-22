@@ -1,144 +1,138 @@
-import React, { useState } from 'react';
-import { mintNFTOnChain } from './contract';
+import { NFTStorage } from 'nft.storage';
+import { mintNFT } from './stellar';
 
-function MintNFT({ walletAddress }) {
-  const [artName, setArtName] = useState('');
-  const [description, setDescription] = useState('');
-  const [image, setImage] = useState(null);
-  const [status, setStatus] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleMint = async () => {
-    if (!walletAddress) {
-      setStatus('⚠️ Please connect your wallet first!');
-      return;
-    }
-
-    if (!artName || !description) {
-      setStatus('⚠️ Please fill in all fields!');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setStatus('🔄 Preparing transaction...');
-
-      // For now using a placeholder image URI - real IPFS upload comes next
-      const imageUri = image
-        ? `ipfs://placeholder-${Date.now()}`
-        : 'ipfs://no-image';
-
-      setStatus('🔄 Please confirm in Freighter wallet...');
-
-      const result = await mintNFTOnChain(
-        walletAddress,
-        artName,
-        description,
-        imageUri
-      );
-
-      setStatus(
-        `✅ NFT Minted On-Chain!\nToken ID: ${result.tokenId}\nTx: ${result.hash.slice(0, 10)}...`
-      );
-
-    } catch (error) {
-      setStatus('❌ ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div style={styles.container}>
-      <h2 style={styles.title}>🎨 Mint Your NFT</h2>
-
-      <div style={styles.field}>
-        <label style={styles.label}>Art Name</label>
-        <input
-          style={styles.input}
-          placeholder="e.g. Sunset in Lagos"
-          value={artName}
-          onChange={(e) => setArtName(e.target.value)}
-        />
-      </div>
-
-      <div style={styles.field}>
-        <label style={styles.label}>Description</label>
-        <textarea
-          style={styles.textarea}
-          placeholder="Describe your artwork..."
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
-
-      <div style={styles.field}>
-        <label style={styles.label}>Upload Artwork</label>
-        <input
-          type="file"
-          accept="image/*"
-          style={styles.fileInput}
-          onChange={(e) => setImage(e.target.files[0])}
-        />
-        {image && (
-          <img
-            src={URL.createObjectURL(image)}
-            alt="preview"
-            style={styles.preview}
-          />
-        )}
-      </div>
-
-      <button
-        onClick={handleMint}
-        style={loading ? styles.buttonDisabled : styles.button}
-        disabled={loading}
-      >
-        {loading ? '⏳ Minting...' : '🚀 Mint NFT On-Chain'}
-      </button>
-
-      {status && <p style={styles.status}>{status}</p>}
-    </div>
-  );
-}
-
-const styles = {
-  container: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: '12px',
-    padding: '24px',
-    maxWidth: '400px',
-    margin: '20px auto',
-  },
-  title: { color: '#7c3aed', textAlign: 'center', marginBottom: '24px' },
-  field: { marginBottom: '16px' },
-  label: { display: 'block', color: '#888888', fontSize: '14px', marginBottom: '6px' },
-  input: {
-    width: '100%', padding: '12px', borderRadius: '8px',
-    border: '1px solid #333333', backgroundColor: '#0a0a0a',
-    color: '#ffffff', fontSize: '14px', boxSizing: 'border-box',
-  },
-  textarea: {
-    width: '100%', padding: '12px', borderRadius: '8px',
-    border: '1px solid #333333', backgroundColor: '#0a0a0a',
-    color: '#ffffff', fontSize: '14px', height: '80px', boxSizing: 'border-box',
-  },
-  fileInput: { color: '#ffffff', fontSize: '14px' },
-  preview: { width: '100%', borderRadius: '8px', marginTop: '10px', maxHeight: '200px', objectFit: 'cover' },
-  button: {
-    backgroundColor: '#7c3aed', color: '#ffffff', border: 'none',
-    borderRadius: '8px', padding: '14px', fontSize: '16px',
-    cursor: 'pointer', width: '100%', marginTop: '8px',
-  },
-  buttonDisabled: {
-    backgroundColor: '#444444', color: '#888888', border: 'none',
-    borderRadius: '8px', padding: '14px', fontSize: '16px',
-    width: '100%', marginTop: '8px',
-  },
-  status: {
-    marginTop: '16px', color: '#f59e0b', fontSize: '13px',
-    textAlign: 'center', whiteSpace: 'pre-line',
-  },
+/**
+ * Sanitizes artwork name to a valid Stellar asset code (max 12 uppercase alphanumeric characters).
+ * @param {string} artName - The name of the artwork.
+ * @returns {string} - Sanitized asset code (e.g. "SUNSETINLAGO").
+ */
+export const generateAssetCode = (artName) => {
+  if (!artName || typeof artName !== 'string') {
+    return 'NFT';
+  }
+  const sanitized = artName.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 12);
+  return sanitized || 'NFT';
 };
 
-export default MintNFT;
+/**
+ * Deterministic mock IPFS upload function for testing / offline use.
+ * Simulates latency and returns a deterministic IPFS URI.
+ * @param {File|Blob|object} file - The artwork image file.
+ * @param {object} metadata - Metadata containing name and description.
+ * @returns {Promise<string>} - IPFS metadata URI.
+ */
+export const mockIPFSUpload = async (file, { name = '', description = '' } = {}) => {
+  const delay = process.env.NODE_ENV === 'test' ? 10 : 600;
+  await new Promise((resolve) => setTimeout(resolve, delay));
+
+  const fileName = file?.name || 'art';
+  const seed = `${name}-${fileName}`.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  let hash = '';
+  for (let i = 0; i < 32; i++) {
+    const charCode = seed.charCodeAt(i % (seed.length || 1)) || 97;
+    hash += String.fromCharCode(97 + ((charCode * (i + 3) * 7) % 26));
+  }
+
+  const cid = `bafybeig${hash}`;
+  return `ipfs://${cid}/metadata.json`;
+};
+
+/**
+ * Uploads artwork image and metadata to IPFS via NFT.Storage or fallback mock.
+ * @param {File|Blob} file - The artwork image file.
+ * @param {object} metadata - Metadata object with name and description.
+ * @returns {Promise<string>} - The IPFS URI for the metadata (e.g. "ipfs://.../metadata.json").
+ */
+export const uploadArtworkToIPFS = async (file, { name = '', description = '' } = {}) => {
+  if (!file) {
+    throw new Error('Artwork file is required for IPFS upload.');
+  }
+
+  const apiKey = process.env.REACT_APP_NFT_STORAGE_KEY;
+
+  if (apiKey && typeof apiKey === 'string' && apiKey.trim() !== '') {
+    const client = new NFTStorage({ token: apiKey.trim() });
+    const metadata = await client.store({
+      name: name || 'Untitled NFT',
+      description: description || '',
+      image: file,
+    });
+    return metadata.url;
+  }
+
+  return await mockIPFSUpload(file, { name, description });
+};
+
+/**
+ * Coordinates the full minting flow:
+ * 1. IPFS Upload
+ * 2. Asset Code Generation
+ * 3. Stellar Testnet Transaction Submission
+ * @param {object} params
+ * @param {File|Blob} params.file - The artwork image file.
+ * @param {string} params.name - The artwork title.
+ * @param {string} params.description - The artwork description.
+ * @param {string} [params.walletAddress] - The user's Stellar public key.
+ * @param {object} [params.issuerKeypair] - Optional Keypair instance.
+ * @param {function} [params.onStatusUpdate] - Status update callback.
+ * @returns {Promise<object>} - Result with success status, assetCode, metadataUrl, and tx hash.
+ */
+export const mintNFTWorkflow = async ({
+  file,
+  name,
+  description,
+  walletAddress,
+  issuerKeypair,
+  onStatusUpdate = () => {},
+}) => {
+  if (!name || !name.trim()) {
+    throw new Error('Artwork title is required.');
+  }
+  if (!description || !description.trim()) {
+    throw new Error('Artwork description is required.');
+  }
+  if (!file) {
+    throw new Error('Artwork image file is required.');
+  }
+
+  const signer = issuerKeypair || walletAddress;
+  if (!signer) {
+    throw new Error('Wallet address or issuer keypair is required.');
+  }
+
+  // 1. IPFS Upload
+  onStatusUpdate('Uploading to IPFS...');
+  const metadataUrl = await uploadArtworkToIPFS(file, {
+    name: name.trim(),
+    description: description.trim(),
+  });
+
+  // 2. Asset Creation
+  const assetCode = generateAssetCode(name.trim());
+
+  // 3. Stellar tx submission
+  onStatusUpdate('Submitting to Stellar Testnet...');
+  const destination = walletAddress || (typeof signer === 'string' ? signer : signer.publicKey());
+  const result = await mintNFT(signer, assetCode, metadataUrl, { destination });
+
+  // 4. Return result
+  onStatusUpdate('Minted Successfully!');
+
+  return {
+    success: true,
+    assetCode,
+    metadataUrl,
+    hash: result?.hash || result?.id || '',
+    result,
+  };
+};
+
+const mintNFTService = {
+  generateAssetCode,
+  mockIPFSUpload,
+  uploadArtworkToIPFS,
+  mintNFTWorkflow,
+};
+
+export default mintNFTService;

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { getTotalSupply, getTokenOwner } from './contract';
+import NFTCardSkeleton from './NFTCardSkeleton';
 
-function Gallery({ walletAddress }) {
+const SKELETON_COUNT = 6;
+
+function Gallery({ walletAddress, skeletonCount = SKELETON_COUNT }) {
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -49,8 +52,16 @@ function Gallery({ walletAddress }) {
 
   if (loading) {
     return (
-      <div style={styles.loading}>
-        <p>⏳ Loading NFTs from Stellar...</p>
+      <div style={styles.container}>
+        <h2 style={styles.title}>🏛️ NFT Gallery</h2>
+        <p style={styles.count}>Loading on-chain NFTs...</p>
+
+        {/* Skeleton Loading Grid */}
+        <div style={styles.grid} data-testid="nft-skeleton-grid">
+          {Array.from({ length: skeletonCount }).map((_, index) => (
+            <NFTCardSkeleton key={`skeleton-${index}`} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -80,9 +91,14 @@ function Gallery({ walletAddress }) {
       <h2 style={styles.title}>🏛️ NFT Gallery</h2>
       <p style={styles.count}>{nfts.length} NFTs on-chain</p>
 
-      <div style={styles.grid}>
+      <div style={styles.grid} data-testid="nft-card-grid">
         {nfts.map((nft) => (
-          <div key={nft.id} style={styles.card} onClick={() => setSelected(nft)}>
+          <div
+            key={nft.id}
+            style={styles.card}
+            onClick={() => setSelected(nft)}
+            data-testid={`nft-card-${nft.id}`}
+          >
             <img src={nft.image} alt={nft.name} style={styles.image} />
             <div style={styles.cardBody}>
               <h3 style={styles.nftName}>{nft.name}</h3>
@@ -95,7 +111,7 @@ function Gallery({ walletAddress }) {
       </div>
 
       {selected && (
-        <div style={styles.modal}>
+        <div style={styles.modal} data-testid="nft-modal">
           <div style={styles.modalContent}>
             <img src={selected.image} alt={selected.name} style={styles.modalImage} />
             <h2 style={styles.modalTitle}>{selected.name}</h2>
@@ -123,7 +139,6 @@ const styles = {
   cardBody: { padding: '12px' },
   nftName: { color: '#ffffff', fontSize: '14px', marginBottom: '4px' },
   nftOwner: { color: '#7c3aed', fontSize: '11px', fontFamily: 'monospace' },
-  loading: { textAlign: 'center', color: '#888888', padding: '40px' },
   empty: { textAlign: 'center', padding: '40px', color: '#ffffff' },
   emptyText: { color: '#888888', fontSize: '14px' },
   retryButton: {
@@ -150,4 +165,5 @@ const styles = {
   },
 };
 
+export { NFTCardSkeleton };
 export default Gallery;

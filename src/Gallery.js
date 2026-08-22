@@ -90,6 +90,40 @@ function NFTModal({ nft, onClose }) {
 // Gallery — main component
 // ─────────────────────────────────────────────────────────────────────────────
 function Gallery({ walletAddress }) {
+import React, { useState, useEffect } from 'react';
+import NFTCardSkeleton from './NFTCardSkeleton';
+
+// Sample NFT data (will be replaced with real Stellar data later)
+export const sampleNFTs = [
+  {
+    id: 1,
+    name: 'Sunset in Lagos',
+    description: 'A beautiful sunset over Lagos city',
+    image: 'https://picsum.photos/300/300?random=1',
+    owner: 'GBXY...3456',
+    minted: 'Jun 19, 2026',
+  },
+  {
+    id: 2,
+    name: 'African Patterns',
+    description: 'Traditional African art patterns',
+    image: 'https://picsum.photos/300/300?random=2',
+    owner: 'GBXY...3456',
+    minted: 'Jun 19, 2026',
+  },
+  {
+    id: 3,
+    name: 'Stellar Universe',
+    description: 'The beauty of the Stellar blockchain',
+    image: 'https://picsum.photos/300/300?random=3',
+    owner: 'GBXY...3456',
+    minted: 'Jun 19, 2026',
+  },
+];
+
+const SKELETON_COUNT = 6;
+
+function Gallery({ skeletonCount = SKELETON_COUNT } = {}) {
   const [nfts, setNfts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -138,6 +172,20 @@ function Gallery({ walletAddress }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletAddress]);
+    let isMounted = true;
+    // Simulate loading NFTs from Stellar
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        setNfts(sampleNFTs);
+        setLoading(false);
+      }
+    }, 1500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, []);
 
   // ── State: wallet not connected ──────────────────────────────────────────
   if (!walletAddress) {
@@ -158,6 +206,16 @@ function Gallery({ walletAddress }) {
       <div style={styles.loadingContainer}>
         <div style={styles.spinner} aria-label="Loading NFTs" role="status" />
         <p style={styles.loadingText}>⏳ Loading your NFTs from Stellar…</p>
+      <div style={styles.container}>
+        <h2 style={styles.title}>🏛️ NFT Gallery</h2>
+        <p style={styles.count}>Loading NFTs...</p>
+
+        {/* Skeleton Loading Grid */}
+        <div style={styles.grid} data-testid="nft-skeleton-grid">
+          {Array.from({ length: skeletonCount }).map((_, index) => (
+            <NFTCardSkeleton key={`skeleton-${index}`} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -224,12 +282,55 @@ function Gallery({ walletAddress }) {
       <div style={styles.grid}>
         {nfts.map((nft) => (
           <NFTCard key={nft.id} nft={nft} onClick={setSelected} />
+      {/* NFT Grid */}
+      <div style={styles.grid} data-testid="nft-card-grid">
+        {nfts.map((nft) => (
+          <div
+            key={nft.id}
+            style={styles.card}
+            onClick={() => setSelected(nft)}
+            data-testid={`nft-card-${nft.id}`}
+          >
+            <img
+              src={nft.image}
+              alt={nft.name}
+              style={styles.image}
+            />
+            <div style={styles.cardBody}>
+              <h3 style={styles.nftName}>{nft.name}</h3>
+              <p style={styles.nftDesc}>{nft.description}</p>
+              <p style={styles.nftDate}>📅 {nft.minted}</p>
+            </div>
+          </div>
         ))}
       </div>
 
       {/* Detail modal */}
       {selected && (
         <NFTModal nft={selected} onClose={() => setSelected(null)} />
+        <div style={styles.modal} data-testid="nft-modal">
+          <div style={styles.modalContent}>
+            <img
+              src={selected.image}
+              alt={selected.name}
+              style={styles.modalImage}
+            />
+            <h2 style={styles.modalTitle}>{selected.name}</h2>
+            <p style={styles.modalDesc}>{selected.description}</p>
+            <p style={styles.modalOwner}>
+              👤 Owner: {selected.owner}
+            </p>
+            <p style={styles.modalDate}>
+              📅 Minted: {selected.minted}
+            </p>
+            <button
+              style={styles.closeButton}
+              onClick={() => setSelected(null)}
+            >
+              ✕ Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -295,6 +396,10 @@ const styles = {
     width: '40px', height: '40px', borderRadius: '50%',
     border: '3px solid #333333', borderTopColor: '#7c3aed',
     animation: 'spin 0.8s linear infinite', marginBottom: '16px',
+  empty: {
+    textAlign: 'center',
+    padding: '40px',
+    color: '#ffffff',
   },
   loadingText: { fontSize: '14px', margin: 0 },
 
@@ -344,4 +449,5 @@ if (typeof document !== 'undefined' && !document.getElementById('gallery-spin-ke
   document.head.appendChild(style);
 }
 
+export { NFTCardSkeleton };
 export default Gallery;

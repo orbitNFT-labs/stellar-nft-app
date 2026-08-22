@@ -1,4 +1,5 @@
 import * as StellarSdk from 'stellar-sdk';
+import { signTransaction } from '@stellar/freighter-api';
 
 // ================================
 // STELLAR NETWORK CONFIGURATION
@@ -97,6 +98,89 @@ export const getNFTs = async (publicKey) => {
     issuer: nft.asset_issuer,
     balance: nft.balance,
   }));
+};
+
+// Mint an NFT asset on Stellar Testnet with IPFS metadata
+export const mintNFT = async (issuerKeypair, assetCode, metadataUrl, options = {}) => {
+  try {
+    if (!issuerKeypair) {
+      throw new Error('Issuer keypair or public key is required');
+    }
+    if (!assetCode) {
+      throw new Error('Asset code is required');
+    }
+
+    const issuerPublicKey =
+      typeof issuerKeypair === 'string'
+        ? issuerKeypair
+        : typeof issuerKeypair.publicKey === 'function'
+        ? issuerKeypair.publicKey()
+        : issuerKeypair.publicKey || String(issuerKeypair);
+
+    if (!isValidAddress(issuerPublicKey)) {
+      throw new Error(`Invalid issuer Stellar address: ${issuerPublicKey}`);
+    }
+
+    const asset = createNFTAsset(assetCode, issuerPublicKey);
+    const account = await getAccount(issuerPublicKey);
+
+    const txBuilder = new StellarSdk.TransactionBuilder(account, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: networkPassphrase || StellarSdk.Networks.TESTNET,
+    });
+
+    const dataValue =
+      typeof metadataUrl === 'string' && Buffer.byteLength(metadataUrl) > 64
+        ? metadataUrl.slice(0, 64)
+        : (metadataUrl || '');
+
+    txBuilder.addOperation(
+      StellarSdk.Operation.manageData({
+        name: 'nft_metadata',
+        value: dataValue,
+      })
+    );
+
+    const destination = options.destination || issuerPublicKey;
+    txBuilder.addOperation(
+      StellarSdk.Operation.payment({
+        destination,
+        asset,
+        amount: '1',
+      })
+    );
+
+    txBuilder.setTimeout(30);
+    const transaction = txBuilder.build();
+
+    const canSignDirectly =
+      issuerKeypair &&
+      typeof issuerKeypair === 'object' &&
+      typeof issuerKeypair.sign === 'function' &&
+      (typeof issuerKeypair.canSign === 'function'
+        ? issuerKeypair.canSign()
+        : Boolean(issuerKeypair.secret || issuerKeypair._secretSeed));
+
+    if (canSignDirectly) {
+      transaction.sign(issuerKeypair);
+      const result = await server.submitTransaction(transaction);
+      return result;
+    } else {
+      const xdr = transaction.toXDR();
+      let signedXdr = await signTransaction(xdr, { network: 'TESTNET' });
+      if (signedXdr && typeof signedXdr === 'object') {
+        signedXdr = signedXdr.signedTxXdr || signedXdr.signedXDR || signedXdr;
+      }
+      const signedTransaction = StellarSdk.TransactionBuilder.fromXDR(
+        signedXdr,
+        networkPassphrase
+      );
+      const result = await server.submitTransaction(signedTransaction);
+      return result;
+    }
+  } catch (error) {
+    throw new Error(`Minting failed: ${error.message}`);
+  }
 };
 
 // ================================
